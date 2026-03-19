@@ -327,16 +327,19 @@
   #toast.show { transform:translate(-50%,-50%) scale(1); opacity:1; }
   #startscreen {
     display: none; position: fixed; top:0; right:0; bottom:0; left:0; z-index: 80;
-    flex-direction: column; align-items: center; justify-content: center;
+    flex-direction: column; align-items: center; justify-content: flex-start;
+    overflow-y: auto; overflow-x: hidden;
+    padding: clamp(12px,3vh,32px) 16px;
+    box-sizing: border-box;
     background: rgba(6,10,20,0.88); -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px);
   }
   #startscreen.show { display: flex; }
   #start-btn {
     font-family:'Orbitron',sans-serif;
-    font-size:clamp(14px,3.5vw,18px); font-weight:700;
+    font-size:clamp(16px,4.6vw,24px); font-weight:700;
     letter-spacing:4px; color:#090e1a; background:#4ab8ff;
     border:none; border-radius:8px;
-    padding:clamp(10px,2.5vw,14px) clamp(28px,7vw,48px);
+    padding:clamp(13px,3.3vw,19px) clamp(36px,9vw,64px);
     cursor:pointer; box-shadow:0 0 30px #4ab8ff66;
     transition:transform .15s, box-shadow .15s;
     touch-action: manipulation;
@@ -829,15 +832,15 @@
 
 <div id="startscreen">
   <canvas id="logo-canvas" width="320" height="175" style="
-  width:min(480px,88vw);height:auto;
+  width:min(440px,80vw,56vh);height:auto;
   display:block;margin:0 auto 0;
 "></canvas>
-  <div style="font-family:'Rajdhani',sans-serif;font-size:clamp(13px,3vw,18px);color:#ffffff;font-weight:800;
-    letter-spacing:4px;margin-bottom:24px;">CHALK · SHOOT · BULLSEYE</div>
+  <div style="font-family:'Rajdhani',sans-serif;font-size:clamp(16px,4vw,24px);color:#ffffff;font-weight:800;
+    letter-spacing:5px;margin-bottom:clamp(10px,1.8vh,22px);">CHALK · SHOOT · BULLSEYE</div>
 
   <div id="how-to-play" style="
     font-family:'Rajdhani',sans-serif;
-    font-size:clamp(14px,3.5vw,20px);
+    font-size:clamp(15px,2.9vw,21px);
     color:#cce4ff;
     line-height:1.85;
     text-align:left;
@@ -845,13 +848,13 @@
     background:rgba(10,20,40,0.6);
     border:1px solid rgba(74,184,255,0.25);
     border-radius:10px;
-    padding:clamp(12px,3vw,22px) clamp(16px,4vw,28px);
-    margin-bottom:28px;
+    padding:clamp(13px,2.6vw,21px) clamp(16px,4vw,29px);
+    margin-bottom:clamp(20px,3vh,32px);
   ">
-    <div style="font-family:'Orbitron',sans-serif;font-size:clamp(10px,2vw,13px);
-      color:#4ab8ff;letter-spacing:3px;margin-bottom:12px;">HOW TO PLAY</div>
+    <div style="font-family:'Orbitron',sans-serif;font-size:clamp(13px,2.7vw,17px);
+      color:#4ab8ff;letter-spacing:4px;margin-bottom:14px;">HOW TO PLAY</div>
     <div>🎯 &nbsp;<b>AIM</b> — drag across the table to rotate the cue</div>
-    <div><svg width="18" height="18" viewBox="0 0 18 18" style="vertical-align:middle;margin-right:4px;" fill="none"><line x1="2" y1="16" x2="16" y2="2" stroke="#d4a040" stroke-width="2.2" stroke-linecap="round"/><line x1="2" y1="16" x2="4" y2="14" stroke="#f0c060" stroke-width="3.5" stroke-linecap="round"/><circle cx="15.5" cy="2.5" r="1.2" fill="#a0c8ff"/></svg><b>SHOOT</b> — pull and release the bar on the left to shoot</div>
+    <div><svg width="18" height="18" viewBox="0 0 18 18" style="vertical-align:middle;margin-right:4px;" fill="none"><line x1="2" y1="16" x2="16" y2="2" stroke="#d4a040" stroke-width="2.2" stroke-linecap="round"/><line x1="2" y1="16" x2="4" y2="14" stroke="#f0c060" stroke-width="3.5" stroke-linecap="round"/><circle cx="15.5" cy="2.5" r="1.2" fill="#a0c8ff"/></svg> &nbsp;<b>SHOOT</b> — pull and release the bar on the left to shoot</div>
     <div>🎱 &nbsp;<b>SCORE</b> — land the object ball in the rings</div>
 
   </div>
@@ -2630,40 +2633,31 @@ function endShot() {
 // Cue ball was potted: animate it sliding out of the pocket it fell into,
 // restore tgt ball and bull to their shot-start positions, replay same shot.
 function beginCueFoulShot() {
-  // Restore bull to its shot-start position immediately (it doesn't animate)
-  bull.x = _shotBullX; bull.y = _shotBullY;
+  // Cue ball was potted.
+  // Slide cue back from pocket to shot-start position.
+  // After slide: beginNextShot() gives a FRESH object ball + bull layout.
 
-  // Place tgt ball at its final resting position (or pocket if sunk) — slide will return it
-  tgtBall.x = _tgtFinalX; tgtBall.y = _tgtFinalY;
-  tgtBall.vx = 0; tgtBall.vy = 0;
-  _clearBallState(tgtBall);
-
-  // Place cue ball at pocket centre — slide will bring it back to start
   cueBall.x = _cueSunkPocketX; cueBall.y = _cueSunkPocketY;
   cueBall.vx = 0; cueBall.vy = 0;
   _clearBallPhysics(cueBall);
   cueSunk = false; tgtSunk = false; foulTriggered = false;
   scoredThisShot = false;
 
-  // Animate: both cue and tgt ball slide back to their shot-start positions
-  const SLIDE_MS = 700;
-  const startT = performance.now();
   phase = 'wait';
+  const startT = performance.now();
 
   _slideAnim = {
-    fromBull: { x: bull.x,    y: bull.y    },
-    toBull:   { x: bull.x,    y: bull.y    },
-    // Tgt slides from final resting position back to its shot-start position
-    fromTgt:  { x: _tgtFinalX,  y: _tgtFinalY  },
-    toTgt:    { x: _shotTgtSX,  y: _shotTgtSY  },
-    // Cue slides from pocket back to its shot-start position
+    fromBull: { x: _shotBullX, y: _shotBullY },
+    toBull:   { x: _shotBullX, y: _shotBullY },
+    fromTgt:  { x: _tgtFinalX, y: _tgtFinalY },
+    toTgt:    { x: _tgtFinalX, y: _tgtFinalY },
     fromCue:  { x: _cueSunkPocketX, y: _cueSunkPocketY },
     toCue:    { x: _shotCueSX,      y: _shotCueSY      },
     isCueFoul: true,
-    startT, dur: SLIDE_MS
+    _afterCueFoul: true,
+    startT, dur: 500
   };
 }
-
 function setAimTowardTarget() {
   // Point aimAngle from cue ball directly toward object ball
   aimAngle = Math.atan2(tgtBall.y - cueBall.y, tgtBall.x - cueBall.x);
@@ -2869,7 +2863,18 @@ function tickSlide() {
       _clearBallPhysics(cueBall);
     }
 
+    const _wasCueFoul = s._afterCueFoul;
     _slideAnim = null;
+
+    if (_wasCueFoul) {
+      // After cue-foul slide: cue is now back at shot-start position.
+      // Trigger beginNextShot to generate fresh object ball + bull layout.
+      _refillScoreBefore = score;
+      _refillScoreAfter  = score;
+      beginNextShot();
+      return;
+    }
+
     phase = 'aim'; isDragging = false; pullDist = 0; targetPullDist = 0;
     setAimTowardTarget();
     startShotClock();
@@ -2928,9 +2933,9 @@ function paintLogoOnCanvas(cvs, size) {
   lx.clearRect(0, 0, size, size);
   // Blue glow behind logo
   const cx = size/2, cy = size/2;
-  const grd = lx.createRadialGradient(cx, cy, size*0.15, cx, cy, size*0.50);
-  grd.addColorStop(0,   'rgba(74,184,255,0.175)');
-  grd.addColorStop(0.6, 'rgba(74,184,255,0.07)');
+  const grd = lx.createRadialGradient(cx, cy, size*0.20, cx, cy, size*0.38);
+  grd.addColorStop(0,   'rgba(74,184,255,0.15)');
+  grd.addColorStop(0.7, 'rgba(74,184,255,0.04)');
   grd.addColorStop(1,   'rgba(74,184,255,0.00)');
   lx.fillStyle = grd; lx.fillRect(0, 0, size, size);
   lx.drawImage(_logoCvs, dx, dy, dw, dh);
