@@ -849,14 +849,16 @@
 
 <script>
 // ── JSONBin.io — global likes + world high score ─────────────────────────
-var _JB_URL = 'https://api.jsonbin.io/v3/b/69bbfe95aa77b81da9fc1270';
+var _JB_BIN = '69bbfe95aa77b81da9fc1270';
 var _JB_KEY = '$2a$10$4HLRz4E79aZHwUE5X3nwxe6v3NX12r7unts76tleVQEhgStazOxYa';
+var _JB_BASE = 'https://api.jsonbin.io/v3/b/' + _JB_BIN;
 var _globalLikes = 0;
 var _worldBest   = 0;
 var _hasLiked    = false;
 var _jbLoaded    = false;
 
 function _fmtLikes(n) {
+  n = parseInt(n) || 0;
   if (n >= 10000) return Math.floor(n / 1000) + 'k';
   if (n >= 1000)  return (n / 1000).toFixed(1).replace(/\.0$/, '') + 'k';
   return String(n);
@@ -871,107 +873,108 @@ function _updateHeartUI() {
 
 function _updateWorldBestUI() {
   var hb = document.getElementById('hud-best-val');
-  if (hb) hb.textContent = 'WORLD BEST ' + _worldBest;
+  if (hb) hb.textContent = 'WORLD BEST ' + (_worldBest || 0);
 }
 
-// Read latest from bin — always fresh, never stale
-function _jbRead() {
-  return fetch(_JB_URL + '/latest', {
-    headers: { 'X-Access-Key': _JB_KEY, 'X-Bin-Meta': 'false' }
-  })
-  .then(function(r) {
-    if (!r.ok) throw new Error('read failed: ' + r.status);
-    return r.json();
-  })
-  .then(function(d) {
-    // With X-Bin-Meta: false the response IS the record directly
-    // Without it, it's wrapped in { record: {...}, metadata: {...} }
-    var rec = (d && typeof d.record !== 'undefined') ? d.record : d;
-    var likes = (rec && typeof rec.likes === 'number') ? rec.likes : 0;
-    var wb    = (rec && typeof rec.worldBest === 'number') ? rec.worldBest : 0;
-    return { likes: likes, worldBest: wb };
-  });
+// XHR-based request — avoids CORS preflight that fetch+custom headers triggers
+function _jbXHR(method, url, headers, body, cb) {
+  var xhr = new XMLHttpRequest();
+  xhr.open(method, url, true);
+  Object.keys(headers).forEach(function(k) { xhr.setRequestHeader(k, headers[k]); });
+  xhr.onload = function() {
+    if (xhr.status >= 200 && xhr.status < 300) {
+      try { cb(null, JSON.parse(xhr.responseText)); }
+      catch(e) { cb(new Error('JSON parse error')); }
+    } else {
+      cb(new Error('HTTP ' + xhr.status + ': ' + xhr.responseText));
+    }
+  };
+  xhr.onerror = function() { cb(new Error('Network error')); };
+  xhr.ontimeout = function() { cb(new Error('Timeout')); };
+  xhr.timeout = 8000;
+  xhr.send(body || null);
 }
 
-// Write full object to bin
-function _jbWrite(data) {
-  return fetch(_JB_URL, {
-    method: 'PUT',
-    headers: {
-      'Content-Type': 'application/json',
-      'X-Access-Key': _JB_KEY,
-      'X-Bin-Versioning': 'false'
-    },
-    body: JSON.stringify(data)
-  })
-  .then(function(r) {
-    if (!r.ok) throw new Error('write failed: ' + r.status);
-    return r.json();
-  })
-  .then(function(d) {
-    var rec = (d && typeof d.record !== 'undefined') ? d.record : d;
-    return rec;
-  });
-}
-
-// Load on page open — set UI from fresh read
-function _jbLoad() {
-  _jbRead()
-    .then(function(data) {
-      _globalLikes = data.likes;
-      _worldBest   = data.worldBest;
-      _jbLoaded    = true;
-      try { _hasLiked = !!localStorage.getItem('ps_liked'); } catch(e) {}
-      _updateHeartUI();
-      _updateWorldBestUI();
-    })
-    .catch(function(err) {
-      console.warn('[PoolShoot] JSONBin load failed:', err);
-      _jbLoaded = true;
+// Read latest bin — public read so no auth header needed (no preflight)
+function _jbRead(cb) {
+  _jbXHR('GET', _JB_BASE + '/latest?meta=false', { 'X-Access-Key': _JB_KEY }, null, function(err, d) {
+    if (err) return cb(err);
+    var rec = (d && typeof d.likes !== 'undefined') ? d : (d && d.record ? d.record : {});
+    cb(null, {
+      likes:     parseInt(rec.likes)     || 0,
+      worldBest: parseInt(rec.worldBest) || 0
     });
+  });
 }
 
-// Check + save world best: read fresh → compare → write only if higher
+// Write — requires auth key
+function _jbWrite(data, cb) {
+  var body = JSON.stringify({ likes: data.likes || 0, worldBest: data.worldBest || 0 });
+  _jbXHR('PUT', _JB_BASE, {
+    'Content-Type': 'application/json',
+    'X-Access-Key': _JB_KEY,
+    'X-Bin-Versioning': 'false'
+  }, body, function(err, d) {
+    if (err) return cb && cb(err);
+    var rec = (d && d.record) ? d.record : d;
+    cb && cb(null, rec);
+  });
+}
+
+function _jbLoad() {
+  _jbRead(function(err, data) {
+    if (err) {
+      console.warn('[PoolShoot] load error:', err.message);
+      _jbLoaded = true;
+      return;
+    }
+    _globalLikes = data.likes;
+    _worldBest   = data.worldBest;
+    _jbLoaded    = true;
+    try { _hasLiked = !!localStorage.getItem('ps_liked'); } catch(e) {}
+    _updateHeartUI();
+    _updateWorldBestUI();
+  });
+}
+
 function _checkWorldBest(playerScore) {
-  if (playerScore <= 0) return;
-  // Read latest first to avoid overwriting another player's record
-  _jbRead()
-    .then(function(data) {
-      _globalLikes = data.likes; // keep likes in sync
-      if (playerScore > data.worldBest) {
-        _worldBest = playerScore;
-        return _jbWrite({ likes: data.likes, worldBest: playerScore });
-      } else {
-        _worldBest = data.worldBest;
-      }
-    })
-    .then(function() { _updateWorldBestUI(); })
-    .catch(function() {});
+  if (!playerScore || playerScore <= 0) return;
+  _jbRead(function(err, data) {
+    if (err) return;
+    _globalLikes = data.likes;
+    if (playerScore > data.worldBest) {
+      _worldBest = playerScore;
+      _jbWrite({ likes: data.likes, worldBest: playerScore }, function(err2, rec) {
+        if (rec && typeof rec.worldBest === 'number') _worldBest = rec.worldBest;
+        _updateWorldBestUI();
+      });
+    } else {
+      _worldBest = data.worldBest;
+      _updateWorldBestUI();
+    }
+  });
 }
 
-// Returns true synchronously if player beats local cached world best (for immediate UI)
 function _isNewWorldRecord(playerScore) {
   return playerScore > 0 && playerScore > _worldBest;
 }
 
-// Like: read fresh → increment → write
 function handleHeartClick() {
   if (_hasLiked) return;
   _hasLiked = true;
-  _globalLikes++; // optimistic local increment
   try { localStorage.setItem('ps_liked', '1'); } catch(e) {}
+  _globalLikes++;
   _updateHeartUI();
-  // Read fresh then write
-  _jbRead()
-    .then(function(data) {
-      return _jbWrite({ likes: data.likes + 1, worldBest: data.worldBest });
-    })
-    .then(function(rec) {
-      if (rec && typeof rec.likes === 'number') _globalLikes = rec.likes;
-      _updateHeartUI();
-    })
-    .catch(function() {});
   _animateHearts();
+  _jbRead(function(err, data) {
+    if (err) return;
+    _jbWrite({ likes: data.likes + 1, worldBest: data.worldBest }, function(err2, rec) {
+      if (rec && typeof rec.likes === 'number') {
+        _globalLikes = rec.likes;
+        _updateHeartUI();
+      }
+    });
+  });
 }
 
 function _animateHearts() {
@@ -1005,6 +1008,8 @@ function _animateHearts() {
 }
 
 _jbLoad();
+
+
 
 
 
