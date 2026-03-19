@@ -455,8 +455,8 @@
     border-radius: 0 0 0 14px;
     border-bottom: 1px solid rgba(74,184,255,0.18);
     border-left: 1px solid rgba(74,184,255,0.18);
-    white-space: nowrap;
     max-width: 160px;
+    overflow: hidden;
   }
   #hud-score-val {
     display: block;
@@ -469,11 +469,15 @@
   }
   #hud-best-val {
     display: block;
-    font-size: clamp(7px, 1.4vw, 11px);
+    font-size: clamp(6px, 1.8vw, 11px);
     font-weight: 700;
     color: #6699bb;
-    letter-spacing: 1px;
+    letter-spacing: 0px;
     margin-bottom: 3px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 150px;
   }
 
   /* Safe area inset CSS vars — read by JS for layout calculations */
@@ -937,27 +941,37 @@ function _jbLoad() {
   });
 }
 
+// Session best — highest score achieved this session, not yet saved
+var _sessionBest = 0;
+
 function _checkWorldBest(playerScore) {
+  // Just track session best — no bin write until session ends
   if (!playerScore || playerScore <= 0) return;
-  _jbRead(function(err, data) {
-    if (err) return;
-    _globalLikes = data.likes;
-    if (playerScore > data.worldBest) {
-      _worldBest = playerScore;
-      _jbWrite({ likes: data.likes, worldBest: playerScore }, function(err2, rec) {
-        if (rec && typeof rec.worldBest === 'number') _worldBest = rec.worldBest;
-        _updateWorldBestUI();
-      });
-    } else {
-      _worldBest = data.worldBest;
-      _updateWorldBestUI();
-    }
-  });
+  if (playerScore > _sessionBest) _sessionBest = playerScore;
 }
 
 function _isNewWorldRecord(playerScore) {
   return playerScore > 0 && playerScore > _worldBest;
 }
+
+// Called once on page unload — writes session best to bin if it beats world best
+function _flushWorldBest() {
+  if (_sessionBest <= 0 || _sessionBest <= _worldBest) return;
+  // Use sendBeacon for reliable delivery on page unload
+  // JSONBin doesn't support sendBeacon (no CORS preflight bypass), so use XHR sync
+  try {
+    var body = JSON.stringify({ likes: _globalLikes, worldBest: _sessionBest });
+    var xhr = new XMLHttpRequest();
+    xhr.open('PUT', _JB_BASE, false); // synchronous — OK on unload
+    xhr.setRequestHeader('Content-Type', 'application/json');
+    xhr.setRequestHeader('X-Access-Key', _JB_KEY);
+    xhr.setRequestHeader('X-Bin-Versioning', 'false');
+    xhr.send(body);
+  } catch(e) {}
+}
+
+window.addEventListener('beforeunload', _flushWorldBest);
+window.addEventListener('pagehide', _flushWorldBest);  // iOS fires pagehide not beforeunload
 
 function handleHeartClick() {
   if (_hasLiked) return;
@@ -3781,7 +3795,12 @@ function showEnd() {
     var lbl = document.getElementById('end-best-label');
     if (lbl) { lbl.textContent = '🌍 WORLD RECORD!'; lbl.style.color = '#f0c040'; }
   }
-  _checkWorldBest(score);  // async: read fresh, write if higher, update UI
+  _checkWorldBest(score);  // tracks session best; actual bin write deferred to page unload
+  // Update world best UI immediately if session best is better
+  if (_sessionBest > _worldBest) {
+    _worldBest = _sessionBest;
+    _updateWorldBestUI();
+  }
   const b = document.getElementById('end-badge');
   if (score >= highScore && score > 0) b.textContent = '🏆 NEW HIGH SCORE!';
   else if (score === 0) b.textContent = 'KEEP PRACTISING!';
