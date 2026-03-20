@@ -180,7 +180,7 @@
     .lhud-panel.active { border-color: #4ab8ff; color:#fff; }
     #lhud-hint {
       font-family:'Rajdhani',sans-serif;
-      font-size: 9px; color: #4ab8ff99;
+      font-size: 10.5px; color: #4ab8ff99;
       letter-spacing: 1px;
       background: rgba(9,14,26,0.55);
       border-radius: 3px;
@@ -516,7 +516,26 @@
   border-left: 1px solid rgba(74,184,255,0.18);
 }
 .pre-game { display:none !important; }
-</style>
+
+  #pull-hint-dom {
+    position: fixed;
+    opacity: 0;
+    transform: rotate(-90deg);
+    font-family: 'Orbitron', sans-serif;
+    font-size: 10.5px;
+    font-weight: 700;
+    letter-spacing: 3px;
+    color: rgba(255,255,255,0.65);
+    pointer-events: none;
+    user-select: none;
+    white-space: nowrap;
+    z-index: 60;
+    contain: layout paint;
+    opacity: 1;
+    transition: opacity 0.8s ease;
+  }
+
+  </style>
 <script>
 (function() {
   var ph = document.createElement('script');
@@ -1498,7 +1517,7 @@ function _buildTableCanvas() {
   tc.strokeStyle = 'rgba(0,0,0,0.45)'; tc.lineWidth = 4;
   tc.strokeRect(RAIL,RAIL,TW,TH);
 
-  // ── Pockets ───────────────────────────────────────────────────────────────
+    // ── Pockets ───────────────────────────────────────────────────────────────
   POCKETS.forEach(([px,py]) => {
     // 3px solid black outer ring — sharp edge
     tc.fillStyle = '#000';
@@ -3709,12 +3728,37 @@ function checkFoulRefill(scoreBefore, scoreAfter) {
   }
 }
 
+
+function _positionPullHint() {
+  var el = document.getElementById('pull-hint-dom');
+  var bar = document.getElementById('pbarbg');
+  if (!el || !bar) return;
+  // Delay slightly so rescaleGame has settled
+  setTimeout(function() {
+    var r = bar.getBoundingClientRect();
+    if (r.width === 0) return; // not rendered yet
+    var elW = el.offsetWidth || 120;
+    var elH = el.offsetHeight || 14;
+    // After rotate(-90deg), element visual width = elH, visual height = elW
+    // Position so visual right edge = r.left - 6px (just outside bar left edge)
+    // visual centre x = r.left - 6 - elH/2
+    // Before rotation: left + elW/2 = visual centre x after rotation? No.
+    // After rotate(-90deg) around element centre:
+    //   element centre stays at (left + elW/2, top + elH/2)
+    // So: element centre x = r.left - 6 - elH/2 → left = r.left - 6 - elH/2 - elW/2
+    //     element centre y = r.top + r.height/2   → top  = r.top + r.height/2 - elH/2
+    el.style.left = Math.round(r.left - 6 - elH / 2 - elW / 2) + 'px';
+    el.style.top  = Math.round(r.top + r.height / 2 - elH / 2) + 'px';
+    el.style.opacity = '1';
+  }, 150);
+}
 function updateScoreUI() {
   if (score > highScore) {
     ph('new_high_score', { score: score, previous_best: highScore });
     highScore = score;
     try { localStorage.setItem('bpHighScore', highScore); } catch(e){}
   }
+  if (score >= 60) { var _ph=document.getElementById('pull-hint-dom'); if(_ph) _ph.style.opacity='0'; }
   if (score > 0 && score > _worldBest) {
     if (_lastCommittedBest === 0 || (score - _lastCommittedBest) >= 40) {
       _lastCommittedBest = score; _sessionBest = score; _commitWorldBest(score);
@@ -3788,6 +3832,7 @@ document.getElementById('start-btn').addEventListener('touchend', (e) => {
   document.getElementById('startscreen').classList.remove('show');
   _gameStarted = true;
   ph('game_start', { method: 'touch' });
+  _positionPullHint();
   document.getElementById('hud-score').classList.remove('pre-game');
   var _wb2=document.getElementById('hud-world-best'); if(_wb2)_wb2.classList.remove('pre-game');
   document.getElementById('br-btns').classList.remove('pre-game');
@@ -3799,6 +3844,7 @@ document.getElementById('start-btn').addEventListener('click', () => {
   document.getElementById('startscreen').classList.remove('show');
   _gameStarted = true;
   ph('game_start', { method: 'click' });
+  _positionPullHint();
   document.getElementById('hud-score').classList.remove('pre-game');
   var _wb=document.getElementById('hud-world-best'); if(_wb)_wb.classList.remove('pre-game');
   document.getElementById('br-btns').classList.remove('pre-game');
@@ -4877,5 +4923,6 @@ function sharePoolShoot(){
   }
 }
 </script>
+<div id="pull-hint-dom">PULL TO SHOOT</div>
 </body>
 </html>
