@@ -2591,8 +2591,8 @@ function stepPhysics() {
         const d = Math.hypot(cueBall.x - bull.x, cueBall.y - bull.y);
         return d - BR < RINGS[RINGS.length - 1].r;
       })();
-      // No penalty when both balls land in the target — only punish cue-ball-only
-      const CUE_PENALTY = (cueInTarget && !tgtRing) ? 5 : 0;
+      // No penalty for cue ball in target — player just gets 0 pts, no life lost
+      const CUE_PENALTY = 0;
 
       // Game continues if target ball on a ring (or cue ball in target, so player
       // gets a chance to recover from penalty even without scoring)
@@ -2874,12 +2874,24 @@ function tickSlide() {
     tgtBall.x = s.toTgt.x; tgtBall.y = s.toTgt.y;
 
     if (s.isCueFoul) {
-      // Snap cue to exact start position, clear any residual physics
+      // Snap cue to exact shot-start position, clear any residual physics
       cueBall.x = s.toCue.x; cueBall.y = s.toCue.y;
       _clearBallPhysics(cueBall);
     }
 
+    const _wasCF = s._afterCueFoul;
     _slideAnim = null;
+
+    if (_wasCF) {
+      // Cue foul: cue is back at shot-start. Now generate fresh layout.
+      // cueBall.x/y = shot-start position, cueSunk = false.
+      // beginNextShot uses collinear rule (score<60) or angle rule (score>=60).
+      _refillScoreBefore = score;
+      _refillScoreAfter  = score;
+      beginNextShot();
+      return;
+    }
+
     phase = 'aim'; isDragging = false; pullDist = 0; targetPullDist = 0;
     setAimTowardTarget();
     startShotClock();
