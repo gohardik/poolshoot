@@ -3729,28 +3729,22 @@ function checkFoulRefill(scoreBefore, scoreAfter) {
 }
 
 
-function _positionPullHint() {
+function _doPositionPullHint() {
   var el = document.getElementById('pull-hint-dom');
   var bar = document.getElementById('pbarbg');
   if (!el || !bar) return;
-  // Delay slightly so rescaleGame has settled
-  setTimeout(function() {
-    var r = bar.getBoundingClientRect();
-    if (r.width === 0) return; // not rendered yet
-    var elW = el.offsetWidth || 120;
-    var elH = el.offsetHeight || 14;
-    // After rotate(-90deg), element visual width = elH, visual height = elW
-    // Position so visual right edge = r.left - 6px (just outside bar left edge)
-    // visual centre x = r.left - 6 - elH/2
-    // Before rotation: left + elW/2 = visual centre x after rotation? No.
-    // After rotate(-90deg) around element centre:
-    //   element centre stays at (left + elW/2, top + elH/2)
-    // So: element centre x = r.left - 6 - elH/2 → left = r.left - 6 - elH/2 - elW/2
-    //     element centre y = r.top + r.height/2   → top  = r.top + r.height/2 - elH/2
-    el.style.left = Math.round(r.left - 6 - elH / 2 - elW / 2) + 'px';
-    el.style.top  = Math.round(r.top + r.height / 2 - elH / 2) + 'px';
-    el.style.opacity = '1';
-  }, 150);
+  var r = bar.getBoundingClientRect();
+  if (r.width === 0) return;
+  var elW = el.offsetWidth || 120;
+  var elH = el.offsetHeight || 14;
+  el.style.left = Math.round(r.left - 6 - elH / 2 - elW / 2) + 'px';
+  el.style.top  = Math.round(r.top + r.height / 2 - elH / 2) + 'px';
+  el.style.opacity = '1';
+}
+function _positionPullHint() {
+  if (score >= 60) return;
+  setTimeout(_doPositionPullHint, 200);
+  setTimeout(_doPositionPullHint, 700);  // after mobile fullscreen+rescale
 }
 function updateScoreUI() {
   if (score > highScore) {
@@ -4624,6 +4618,7 @@ window.addEventListener('pageshow', function() { setTimeout(rescaleGame, 100); }
 // Run immediately AND after first paint to catch iOS quirks
 rescaleGame();
 rescaleWhenReady();
+if (typeof _doPositionPullHint === 'function' && score < 60) setTimeout(_doPositionPullHint, 100);
 // iOS Safari sometimes needs an extra kick after fonts/layout settle
 setTimeout(rescaleGame, 150);
 
