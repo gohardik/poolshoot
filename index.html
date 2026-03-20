@@ -2617,12 +2617,8 @@ function stepPhysics() {
           _ringGlowHold = performance.now() + 1200; // hold glow until toast fades
           spawnScoreParticles(tgtBall.x, tgtBall.y, tgtRing ? tgtRing.col : '#4ab8ff', tgtPts);
           if (RING_SOUND === 0) playVictorySound(tgtPts); else if (RING_SOUND === 1) playRingBeepSound(tgtPts); else playRingArcadeSound(tgtPts);
-        } else if (netPts < 0) {
-          showToast(netPts.toString());   // e.g. "-5" or "-3"
-          _ringGlowHold = performance.now() + 1200;
-          // No fireworks or sound for negative score
         } else {
-          showToast('±0');
+          showToast('0 '); { var _t=document.getElementById('toast'); _t.innerHTML='0 <span style="font-family:Arial Black,Arial,sans-serif;text-shadow:0 0 24px #4ab8ff,0 0 48px #4ab8ff66;">:(</span>'; }
         }
         updateScoreUI();
       }
@@ -3755,8 +3751,10 @@ function _doPositionPullHint() {
 }
 function _positionPullHint() {
   if (score >= 60) return;
-  setTimeout(_doPositionPullHint, 200);
-  setTimeout(_doPositionPullHint, 700);  // after mobile fullscreen+rescale
+  setTimeout(_doPositionPullHint, 100);
+  setTimeout(_doPositionPullHint, 500);
+  setTimeout(_doPositionPullHint, 1000);
+  setTimeout(_doPositionPullHint, 2000); // final fallback for portrait iOS
 }
 function updateScoreUI() {
   if (score > highScore) {
@@ -4602,6 +4600,10 @@ function rescaleGame() {
     const sv = document.getElementById('hud-score-val');
     if (sv) sv.style.fontSize = 'clamp(16px,2.5vw,26px)';
   }
+  // Reposition pull hint after every layout change
+  if (typeof _doPositionPullHint === 'function' && score < 60 && _gameStarted) {
+    _doPositionPullHint();
+  }
 }
 
 function rescaleWhenReady() {
@@ -4630,7 +4632,6 @@ window.addEventListener('pageshow', function() { setTimeout(rescaleGame, 100); }
 // Run immediately AND after first paint to catch iOS quirks
 rescaleGame();
 rescaleWhenReady();
-if (typeof _doPositionPullHint === 'function' && score < 60) setTimeout(_doPositionPullHint, 100);
 // iOS Safari sometimes needs an extra kick after fonts/layout settle
 setTimeout(rescaleGame, 150);
 
